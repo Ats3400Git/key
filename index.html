@@ -2,19 +2,18 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Desk-Top Tiny Runner - Balanced</title>
+    <title>Alpha-Step Maker</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Courier New', Courier, monospace; }
-        canvas { display: block; }
+        body { margin: 0; overflow: hidden; background: #0a0a0a; font-family: 'Courier New', Courier, monospace; }
         #ui {
-            position: absolute; top: 20px; left: 20px; color: white;
-            font-size: 20px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;
+            position: absolute; top: 20px; left: 20px; color: #00ff00;
+            font-size: 20px; pointer-events: none; text-shadow: 2px 2px 2px #000;
         }
-        .energy-bar { width: 250px; height: 15px; background: #333; border: 1px solid #777; margin-top: 5px; }
-        #energy-fill { width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s; }
+        .energy-bar { width: 200px; height: 15px; background: #333; border: 1px solid #555; margin-top: 5px; }
+        #energy-fill { width: 100%; height: 100%; background: #00ff00; transition: width 0.1s; }
         #msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff3366; font-size: 40px; text-align: center; display: none; font-weight: bold;
+            color: #fff; font-size: 32px; text-align: center; display: none; background: rgba(0,0,0,0.8); padding: 20px;
         }
     </style>
 </head>
@@ -22,11 +21,11 @@
 
 <div id="ui">
     SCORE: <span id="score">0</span><br>
-    ENERGY (AUTO RECHARGE)
+    TYPE ENERGY
     <div class="energy-bar"><div id="energy-fill"></div></div>
-    <div style="font-size:12px; margin-top:5px; color:#aaa;">Q-P: High/High-Cost | A-L: Mid/Mid-Cost | Z-M: Low/Low-Cost</div>
+    <div style="font-size: 12px; color: #888; margin-top: 5px;">Type ANY Alphabet to Create Steps!</div>
 </div>
-<div id="msg">GAME OVER<br><span style="font-size:18px; color:white;">Press SPACE to Restart</span></div>
+<div id="msg">GAME OVER<br><span style="font-size:18px;">Press SPACE to Restart</span></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -39,139 +38,127 @@ const msgEl = document.getElementById('msg');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let score = 0, energy = 100, gameOver = false, gameWin = false;
+let score = 0, energy = 100, gameOver = false;
+let platforms = []; // 入力された文字足場
+let coins = [];
+const player = { x: 100, y: 300, vx: 3, vy: 0, radius: 15, gravity: 0.4 };
 
-// キーボード設定
-const alphabet = "QWERTYUIOPASDFGHJKLZXCVBNM";
-const rows = [alphabet.slice(0,10), alphabet.slice(10,19), alphabet.slice(19,26)];
-const keys = {};
-
-rows.forEach((row, rowIndex) => {
-    row.split('').forEach((char, i) => {
-        keys[char] = {
-            baseX: i * 90 + 50 + (rowIndex * 30),
-            y: 350 + rowIndex * 100, // 段ごとに高さを変える
-            w: 80, h: 60,
-            cost: [15, 10, 5][rowIndex], // 上段ほど高い
-            jump: [-16, -13, -10][rowIndex], // 上段ほど高く跳ねる
-            active: false, timer: 0
-        };
-    });
-});
-
-const player = { x: 100, y: 300, vx: 3.5, vy: 0, radius: 12, gravity: 0.45 };
-const coins = [];
-for(let i=0; i<40; i++) {
-    coins.push({
-        x: 600 + i * 250, 
-        y: 350 + Math.floor(Math.random() * 3) * 100 - 30, // 各行のキーの少し上に配置
-        collected: false
-    });
+// コインの初期配置
+function initCoins() {
+    coins = [];
+    for(let i=0; i<50; i++) {
+        coins.push({ x: 400 + i * 300, y: 200 + Math.random() * 300, collected: false });
+    }
 }
-const goalX = 10000;
+initCoins();
 
+// キー入力で足場生成
 window.addEventListener('keydown', (e) => {
-    if(gameOver || gameWin) { if(e.code === 'Space') restart(); return; }
+    if(gameOver) { if(e.code === 'Space') restart(); return; }
+    
     const char = e.key.toUpperCase();
-    if(keys[char] && energy >= keys[char].cost) {
-        keys[char].active = true;
-        keys[char].timer = 45; 
-        energy -= keys[char].cost;
+    if(/^[A-Z]$/.test(char) && energy >= 15) {
+        energy -= 15;
+        // キャラクターの少し先に足場を生成
+        platforms.push({
+            char: char,
+            x: player.x + 40,
+            y: player.y + 40,
+            w: 60,
+            h: 40,
+            life: 200 // 寿命（フレーム数）
+        });
     }
 });
 
 function restart() {
-    score = 0; energy = 100; gameOver = false; gameWin = false;
-    player.x = 100; player.y = 300; player.vx = 3.5; player.vy = 0;
-    coins.forEach(c => c.collected = false);
+    score = 0; energy = 100; gameOver = false;
+    player.x = 100; player.y = 300; player.vx = 3; player.vy = 0;
+    platforms = [];
+    initCoins();
     msgEl.style.display = 'none';
 }
 
 function update() {
-    if(gameOver || gameWin) return;
+    if(gameOver) return;
 
-    // 自然回復
-    energy = Math.min(100, energy + 0.15); 
+    energy = Math.min(100, energy + 0.1); // 自然回復
     player.vy += player.gravity;
     player.x += player.vx;
     player.y += player.vy;
 
-    // 足場判定
-    for(let char in keys) {
-        let k = keys[char];
-        if(k.timer > 0) { k.timer--; if(k.timer <= 0) k.active = false; }
-        
-        if(k.active) {
-            // 現在のスクロール位置に合わせたキーの位置を計算
-            let loopX = Math.floor(player.x / 1200) * 1200;
-            for(let off of [-1200, 0, 1200]) {
-                let actualX = k.baseX + loopX + off;
-                if(player.x > actualX - 10 && player.x < actualX + k.w + 10 &&
-                   player.y + player.radius > k.y && player.y + player.radius < k.y + 30 && player.vy > 0) {
-                    player.y = k.y - player.radius;
-                    player.vy = k.jump;
-                }
-            }
+    // 足場との判定
+    platforms.forEach(p => {
+        p.life--;
+        // 簡易当たり判定
+        if(player.vx >= 0 && player.vy > 0 &&
+           player.x > p.x - 15 && player.x < p.x + p.w + 15 &&
+           player.y + player.radius > p.y && player.y + player.radius < p.y + 20) {
+            player.y = p.y - player.radius;
+            player.vy = -10; // 踏むと跳ねる
+            score += 10;
         }
-    }
+    });
+    platforms = platforms.filter(p => p.life > 0); // 消えた足場を削除
 
+    // コイン回収
     coins.forEach(c => {
         if(!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 40) {
-            c.collected = true; score += 100; energy = Math.min(100, energy + 15);
+            c.collected = true;
+            energy = Math.min(100, energy + 30);
+            score += 100;
         }
     });
 
+    if(player.y > canvas.height) {
+        gameOver = true;
+        msgEl.style.display = 'block';
+    }
+
     scoreEl.innerText = score;
     energyEl.style.width = energy + "%";
-    if(player.y > canvas.height + 100) { gameOver = true; msgEl.style.display = 'block'; }
-    if(player.x > goalX) { gameWin = true; msgEl.innerHTML = "GOAL!<br><span style='font-size:18px; color:white;'>Press SPACE to Play Again</span>"; msgEl.style.display = 'block'; }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
     ctx.save();
-    ctx.translate(-player.x + 150, 0);
+    ctx.translate(-player.x + 100, 0);
 
-    // キーの描画
-    for(let char in keys) {
-        let k = keys[char];
-        let loopX = Math.floor(player.x / 1200) * 1200;
-        for(let off of [-1200, 0, 1200]) {
-            let actualX = k.baseX + loopX + off;
-            ctx.fillStyle = k.active ? "#00ffcc" : "#444";
-            ctx.shadowBlur = k.active ? 15 : 0;
-            ctx.shadowColor = "#00ffcc";
-            ctx.fillRect(actualX, k.y, k.w, k.h);
-            ctx.fillStyle = k.active ? "#000" : "#888";
-            ctx.font = "bold 20px sans-serif";
-            ctx.fillText(char, actualX + 30, k.y + 35);
-        }
-    }
-
-    // コイン
-    ctx.fillStyle = "#ffd700";
-    ctx.shadowBlur = 10;
+    // コイン描画
+    ctx.fillStyle = "#ff0";
     coins.forEach(c => {
         if(!c.collected) {
-            ctx.beginPath(); ctx.arc(c.x, c.y, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(c.x, c.y, 10, 0, Math.PI*2); ctx.fill();
         }
     });
-    ctx.shadowBlur = 0;
 
-    // ゴール
-    ctx.fillStyle = "#ff3366";
-    ctx.fillRect(goalX, 200, 20, 600);
+    // 足場（文字）描画
+    platforms.forEach(p => {
+        const alpha = p.life / 200;
+        ctx.fillStyle = `rgba(0, 255, 255, ${alpha})`;
+        ctx.font = "bold 50px sans-serif";
+        ctx.fillText(p.char, p.x, p.y + 40);
+        // 足場の当たり判定可視化（オプション）
+        ctx.strokeStyle = `rgba(0, 255, 255, ${alpha * 0.3})`;
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+    });
 
-    // キャラクター
-    ctx.fillStyle = "white";
-    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "#333";
-    ctx.fillRect(player.x + 4, player.y - 6, 4, 4); // 目
+    // プレイヤー（ミニチュア人間）
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
+    ctx.fill();
+    // 進行方向への目
+    ctx.fillStyle = "#000";
+    ctx.fillRect(player.x + 6, player.y - 5, 4, 4);
 
     ctx.restore();
+
     update();
     requestAnimationFrame(draw);
 }
+
 draw();
 </script>
 </body>
