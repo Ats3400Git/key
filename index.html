@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Desk-Top Tiny Runner</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+        canvas { display: block; background: linear-gradient(#333, #111); }
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: white;
+            font-size: 24px; text-shadow: 2px 2px 4px black; pointer-events: none;
+        }
+        #msg {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: yellow; font-size: 48px; text-align: center; display: none;
+        }
+        .energy-bar { width: 200px; height: 20px; background: #444; border: 2px solid white; }
+        #energy-fill { width: 100%; height: 100%; background: #00d4ff; transition: width 0.1s; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui">
+        SCORE: <span id="score">0</span><br>
+        ENERGY
+        <div class="energy-bar"><div id="energy-fill"></div></div>
+    </div>
+    <div id="msg">GAME OVER<br><span style="font-size:20px">Press SPACE to Restart</span></div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const energyEl = document.getElementById('energy-fill');
+const msgEl = document.getElementById('msg');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// ゲーム設定
+let score = 0;
+let energy = 100;
+let gameOver = false;
+let gameWin = false;
+
+const keys = {}; // 画面上のキーボードデータ
+const alphabet = "QWERTYUIOPASDFGHJKLZXCVBNM";
+const rows = [alphabet.slice(0,10), alphabet.slice(10,19), alphabet.slice(19,26)];
+const activeKeys = {}; // 現在光っているキー
+
+// キーボードの初期化
+rows.forEach((row, rowIndex) => {
+    for(let i=0; i<row.length; i++) {
+        const char = row[i];
+        keys[char] = {
+            x: i * 80 + 100 + (rowIndex * 30),
+            y: rowIndex * 80 + 400,
+            w: 70,
+            h: 70,
+            active: false,
+            timer: 0
+        };
+    }
+});
+
+// プレイヤー
+const player = {
+    x: 50, y: 300, vx: 2, vy: 0, radius: 15,
+    jumpPower: -12, gravity: 0.5
+};
+
+// コインとゴール
+const coins = [];
+for(let i=0; i<20; i++) {
+    coins.push({x: 500 + i * 400 + Math.random()*200, y: 350 + Math.random()*150, collected: false});
+}
+const goalX = 8500;
+
+// 入力イベント
+window.addEventListener('keydown', (e) => {
+    if(gameOver || gameWin) {
+        if(e.code === 'Space') restart();
+        return;
+    }
+    const char = e.key.toUpperCase();
+    if(keys[char] && energy >= 10) {
+        keys[char].active = true;
+        keys[char].timer = 60; // 1秒間持続
+        energy -= 10;
+    }
+});
+
+function restart() {
+    score = 0; energy = 100; gameOver = false; gameWin = false;
+    player.x = 50; player.y = 300; player.vx = 2; player.vy = 0;
+    coins.forEach(c => c.collected = false);
+    msgEl.style.display = 'none';
+}
+
+function update() {
+    if(gameOver || gameWin) return;
+
+    // 重力と移動
+    player.vy += player.gravity;
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // キーボード足場判定
+    let onPlatform = false;
+    for(let char in keys) {
+        let k = keys[char];
+        if(k.timer > 0) {
+            k.timer--;
+            if(k.timer <= 0) k.active = false;
+        }
+
+        if(k.active) {
+            // 簡易当たり判定
+            if(player.x > k.x - 20 && player.x < k.x + k.w + 20 &&
+               player.y + player.radius > k.y && player.y + player.radius < k.y + 20 && player.vy > 0) {
+                player.vy = player.jumpPower;
+                onPlatform = true;
+            }
+        }
+    }
+
+    // コイン回収
+    coins.forEach(c => {
+        if(!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 30) {
+            c.collected = true;
+            score += 100;
+            energy = Math.min(100, energy + 20);
+        }
+    });
+
+    // 状態更新
+    scoreEl.innerText = score;
+    energyEl.style.width = energy + "%";
+
+    // 脱落判定
+    if(player.y > canvas.height) {
+        gameOver = true;
+        msgEl.innerHTML = "GAME OVER<br><span style='font-size:20px'>Press SPACE to Restart</span>";
+        msgEl.style.display = 'block';
+    }
+    
+    // ゴール判定
+    if(player.x > goalX) {
+        gameWin = true;
+        msgEl.innerHTML = "GOAL! ALL CLEAR!<br><span style='font-size:20px'>Press SPACE to Play Again</span>";
+        msgEl.style.display = 'block';
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // カメラ追従
+    ctx.save();
+    ctx.translate(-player.x + 100, 0);
+
+    // 背景のガイド
+    ctx.strokeStyle = "#444";
+    ctx.beginPath();
+    ctx.moveTo(0, 600); ctx.lineTo(goalX + 500, 600);
+    ctx.stroke();
+
+    // キーの描画
+    for(let char in keys) {
+        let k = keys[char];
+        // キーボードをループ表示（横に無限に続くように見せる）
+        let loopX = Math.floor(player.x / 1000) * 1000;
+        for(let off = -1000; off <= 2000; off += 1000) {
+            let drawX = k.x + off + loopX;
+            ctx.fillStyle = k.active ? "#00d4ff" : "#333";
+            ctx.shadowBlur = k.active ? 20 : 0;
+            ctx.shadowColor = "#00d4ff";
+            ctx.fillRect(drawX, k.y, k.w, k.h);
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.fillText(char, drawX + 25, k.y + 40);
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // コインの描画
+    ctx.fillStyle = "yellow";
+    coins.forEach(c => {
+        if(!c.collected) {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 10, 0, Math.PI*2);
+            ctx.fill();
+        }
+    });
+
+    // ゴール
+    ctx.fillStyle = "red";
+    ctx.fillRect(goalX, 300, 10, 300);
+    ctx.fillText("GOAL", goalX - 20, 280);
+
+    // プレイヤー（ミニチュア人間）
+    ctx.fillStyle = "#ff4444";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
+    ctx.fill();
+    // 目
+    ctx.fillStyle = "white";
+    ctx.fillRect(player.x + 5, player.y - 8, 5, 5);
+
+    ctx.restore();
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
