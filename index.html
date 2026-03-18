@@ -2,34 +2,32 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Desk-Top Tiny Runner</title>
+    <title>Desk-Top Tiny Runner - Balanced</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        #game-container { position: relative; width: 100vw; height: 100vh; }
-        canvas { display: block; background: linear-gradient(#333, #111); }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Courier New', Courier, monospace; }
+        canvas { display: block; }
         #ui {
             position: absolute; top: 20px; left: 20px; color: white;
-            font-size: 24px; text-shadow: 2px 2px 4px black; pointer-events: none;
+            font-size: 20px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;
         }
+        .energy-bar { width: 250px; height: 15px; background: #333; border: 1px solid #777; margin-top: 5px; }
+        #energy-fill { width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s; }
         #msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: yellow; font-size: 48px; text-align: center; display: none;
+            color: #ff3366; font-size: 40px; text-align: center; display: none; font-weight: bold;
         }
-        .energy-bar { width: 200px; height: 20px; background: #444; border: 2px solid white; }
-        #energy-fill { width: 100%; height: 100%; background: #00d4ff; transition: width 0.1s; }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <div id="ui">
-        SCORE: <span id="score">0</span><br>
-        ENERGY
-        <div class="energy-bar"><div id="energy-fill"></div></div>
-    </div>
-    <div id="msg">GAME OVER<br><span style="font-size:20px">Press SPACE to Restart</span></div>
-    <canvas id="gameCanvas"></canvas>
+<div id="ui">
+    SCORE: <span id="score">0</span><br>
+    ENERGY (AUTO RECHARGE)
+    <div class="energy-bar"><div id="energy-fill"></div></div>
+    <div style="font-size:12px; margin-top:5px; color:#aaa;">Q-P: High/High-Cost | A-L: Mid/Mid-Cost | Z-M: Low/Low-Cost</div>
 </div>
+<div id="msg">GAME OVER<br><span style="font-size:18px; color:white;">Press SPACE to Restart</span></div>
+<canvas id="gameCanvas"></canvas>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
@@ -41,62 +39,50 @@ const msgEl = document.getElementById('msg');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// ゲーム設定
-let score = 0;
-let energy = 100;
-let gameOver = false;
-let gameWin = false;
+let score = 0, energy = 100, gameOver = false, gameWin = false;
 
-const keys = {}; // 画面上のキーボードデータ
+// キーボード設定
 const alphabet = "QWERTYUIOPASDFGHJKLZXCVBNM";
 const rows = [alphabet.slice(0,10), alphabet.slice(10,19), alphabet.slice(19,26)];
-const activeKeys = {}; // 現在光っているキー
+const keys = {};
 
-// キーボードの初期化
 rows.forEach((row, rowIndex) => {
-    for(let i=0; i<row.length; i++) {
-        const char = row[i];
+    row.split('').forEach((char, i) => {
         keys[char] = {
-            x: i * 80 + 100 + (rowIndex * 30),
-            y: rowIndex * 80 + 400,
-            w: 70,
-            h: 70,
-            active: false,
-            timer: 0
+            baseX: i * 90 + 50 + (rowIndex * 30),
+            y: 350 + rowIndex * 100, // 段ごとに高さを変える
+            w: 80, h: 60,
+            cost: [15, 10, 5][rowIndex], // 上段ほど高い
+            jump: [-16, -13, -10][rowIndex], // 上段ほど高く跳ねる
+            active: false, timer: 0
         };
-    }
+    });
 });
 
-// プレイヤー
-const player = {
-    x: 50, y: 300, vx: 2, vy: 0, radius: 15,
-    jumpPower: -12, gravity: 0.5
-};
-
-// コインとゴール
+const player = { x: 100, y: 300, vx: 3.5, vy: 0, radius: 12, gravity: 0.45 };
 const coins = [];
-for(let i=0; i<20; i++) {
-    coins.push({x: 500 + i * 400 + Math.random()*200, y: 350 + Math.random()*150, collected: false});
+for(let i=0; i<40; i++) {
+    coins.push({
+        x: 600 + i * 250, 
+        y: 350 + Math.floor(Math.random() * 3) * 100 - 30, // 各行のキーの少し上に配置
+        collected: false
+    });
 }
-const goalX = 8500;
+const goalX = 10000;
 
-// 入力イベント
 window.addEventListener('keydown', (e) => {
-    if(gameOver || gameWin) {
-        if(e.code === 'Space') restart();
-        return;
-    }
+    if(gameOver || gameWin) { if(e.code === 'Space') restart(); return; }
     const char = e.key.toUpperCase();
-    if(keys[char] && energy >= 10) {
+    if(keys[char] && energy >= keys[char].cost) {
         keys[char].active = true;
-        keys[char].timer = 60; // 1秒間持続
-        energy -= 10;
+        keys[char].timer = 45; 
+        energy -= keys[char].cost;
     }
 });
 
 function restart() {
     score = 0; energy = 100; gameOver = false; gameWin = false;
-    player.x = 50; player.y = 300; player.vx = 2; player.vy = 0;
+    player.x = 100; player.y = 300; player.vx = 3.5; player.vy = 0;
     coins.forEach(c => c.collected = false);
     msgEl.style.display = 'none';
 }
@@ -104,119 +90,88 @@ function restart() {
 function update() {
     if(gameOver || gameWin) return;
 
-    // 重力と移動
+    // 自然回復
+    energy = Math.min(100, energy + 0.15); 
     player.vy += player.gravity;
     player.x += player.vx;
     player.y += player.vy;
 
-    // キーボード足場判定
-    let onPlatform = false;
+    // 足場判定
     for(let char in keys) {
         let k = keys[char];
-        if(k.timer > 0) {
-            k.timer--;
-            if(k.timer <= 0) k.active = false;
-        }
-
+        if(k.timer > 0) { k.timer--; if(k.timer <= 0) k.active = false; }
+        
         if(k.active) {
-            // 簡易当たり判定
-            if(player.x > k.x - 20 && player.x < k.x + k.w + 20 &&
-               player.y + player.radius > k.y && player.y + player.radius < k.y + 20 && player.vy > 0) {
-                player.vy = player.jumpPower;
-                onPlatform = true;
+            // 現在のスクロール位置に合わせたキーの位置を計算
+            let loopX = Math.floor(player.x / 1200) * 1200;
+            for(let off of [-1200, 0, 1200]) {
+                let actualX = k.baseX + loopX + off;
+                if(player.x > actualX - 10 && player.x < actualX + k.w + 10 &&
+                   player.y + player.radius > k.y && player.y + player.radius < k.y + 30 && player.vy > 0) {
+                    player.y = k.y - player.radius;
+                    player.vy = k.jump;
+                }
             }
         }
     }
 
-    // コイン回収
     coins.forEach(c => {
-        if(!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 30) {
-            c.collected = true;
-            score += 100;
-            energy = Math.min(100, energy + 20);
+        if(!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 40) {
+            c.collected = true; score += 100; energy = Math.min(100, energy + 15);
         }
     });
 
-    // 状態更新
     scoreEl.innerText = score;
     energyEl.style.width = energy + "%";
-
-    // 脱落判定
-    if(player.y > canvas.height) {
-        gameOver = true;
-        msgEl.innerHTML = "GAME OVER<br><span style='font-size:20px'>Press SPACE to Restart</span>";
-        msgEl.style.display = 'block';
-    }
-    
-    // ゴール判定
-    if(player.x > goalX) {
-        gameWin = true;
-        msgEl.innerHTML = "GOAL! ALL CLEAR!<br><span style='font-size:20px'>Press SPACE to Play Again</span>";
-        msgEl.style.display = 'block';
-    }
+    if(player.y > canvas.height + 100) { gameOver = true; msgEl.style.display = 'block'; }
+    if(player.x > goalX) { gameWin = true; msgEl.innerHTML = "GOAL!<br><span style='font-size:18px; color:white;'>Press SPACE to Play Again</span>"; msgEl.style.display = 'block'; }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // カメラ追従
     ctx.save();
-    ctx.translate(-player.x + 100, 0);
-
-    // 背景のガイド
-    ctx.strokeStyle = "#444";
-    ctx.beginPath();
-    ctx.moveTo(0, 600); ctx.lineTo(goalX + 500, 600);
-    ctx.stroke();
+    ctx.translate(-player.x + 150, 0);
 
     // キーの描画
     for(let char in keys) {
         let k = keys[char];
-        // キーボードをループ表示（横に無限に続くように見せる）
-        let loopX = Math.floor(player.x / 1000) * 1000;
-        for(let off = -1000; off <= 2000; off += 1000) {
-            let drawX = k.x + off + loopX;
-            ctx.fillStyle = k.active ? "#00d4ff" : "#333";
-            ctx.shadowBlur = k.active ? 20 : 0;
-            ctx.shadowColor = "#00d4ff";
-            ctx.fillRect(drawX, k.y, k.w, k.h);
-            ctx.fillStyle = "white";
-            ctx.font = "20px Arial";
-            ctx.fillText(char, drawX + 25, k.y + 40);
-            ctx.shadowBlur = 0;
+        let loopX = Math.floor(player.x / 1200) * 1200;
+        for(let off of [-1200, 0, 1200]) {
+            let actualX = k.baseX + loopX + off;
+            ctx.fillStyle = k.active ? "#00ffcc" : "#444";
+            ctx.shadowBlur = k.active ? 15 : 0;
+            ctx.shadowColor = "#00ffcc";
+            ctx.fillRect(actualX, k.y, k.w, k.h);
+            ctx.fillStyle = k.active ? "#000" : "#888";
+            ctx.font = "bold 20px sans-serif";
+            ctx.fillText(char, actualX + 30, k.y + 35);
         }
     }
 
-    // コインの描画
-    ctx.fillStyle = "yellow";
+    // コイン
+    ctx.fillStyle = "#ffd700";
+    ctx.shadowBlur = 10;
     coins.forEach(c => {
         if(!c.collected) {
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, 10, 0, Math.PI*2);
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(c.x, c.y, 8, 0, Math.PI*2); ctx.fill();
         }
     });
+    ctx.shadowBlur = 0;
 
     // ゴール
-    ctx.fillStyle = "red";
-    ctx.fillRect(goalX, 300, 10, 300);
-    ctx.fillText("GOAL", goalX - 20, 280);
+    ctx.fillStyle = "#ff3366";
+    ctx.fillRect(goalX, 200, 20, 600);
 
-    // プレイヤー（ミニチュア人間）
-    ctx.fillStyle = "#ff4444";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
-    ctx.fill();
-    // 目
+    // キャラクター
     ctx.fillStyle = "white";
-    ctx.fillRect(player.x + 5, player.y - 8, 5, 5);
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#333";
+    ctx.fillRect(player.x + 4, player.y - 6, 4, 4); // 目
 
     ctx.restore();
-
     update();
     requestAnimationFrame(draw);
 }
-
 draw();
 </script>
 </body>
