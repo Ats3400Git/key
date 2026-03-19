@@ -1,156 +1,162 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>Type-Wall Breaker</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            font-size: 24px; z-index: 100; text-shadow: 0 0 10px #f0f;
-        }
-        #word-display {
-            position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
-            font-size: 80px; font-weight: 900; color: #333; text-align: center;
-            letter-spacing: 10px; z-index: 100; pointer-events: none;
-        }
-        #word-display span.typed { color: #0f0; text-shadow: 0 0 20px #0f0; }
-        #word-display span.remaining { color: #fff; text-shadow: 0 0 10px #fff; }
-        #msg {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff0044; font-size: 60px; text-align: center; display: none; z-index: 200;
-            background: rgba(0,0,0,0.9); padding: 40px; border: 5px solid #ff0044;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Gravity Maze</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  canvas {
+    background: #000;
+  }
+</style>
 </head>
 <body>
 
-<div id="ui">WALLS DESTROYED: <span id="score">0</span></div>
-<div id="word-display"></div>
-<div id="msg">MELTED BY LAVA...<br><span style="font-size:24px; color:#fff;">Press ESC to Restart</span></div>
-<canvas id="gameCanvas"></canvas>
+<canvas id="game" width="500" height="500"></canvas>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
-const wordEl = document.getElementById('word-display');
-const msgEl = document.getElementById('msg');
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// ボール
+let ball = {
+  x: 50,
+  y: 50,
+  vx: 0,
+  vy: 0,
+  r: 10
+};
 
-const words = ["BREAK", "SMASH", "DASH", "POWER", "QUICK", "FOCUS", "ENERGY", "ESCAPE", "RUNNER", "STRIKE", "BURST", "FLAME"];
-let currentWord = "";
-let typedIndex = 0;
-let score = 0;
-let gameOver = false;
-let playerX = 200;
-let lavaX = -400;
-let lavaSpeed = 1.2;
-let cameraX = 0;
-let wallX = 600;
+// 重力
+let gravity = { x: 0, y: 0.3 };
 
-function init() {
-    score = 0; gameOver = false; 
-    playerX = 200; lavaX = -600; lavaSpeed = 1.5; cameraX = 0; wallX = 600;
-    nextWord();
-    msgEl.style.display = 'none';
-}
+// 壁（迷路）
+let walls = [
+  { x: 100, y: 0, w: 20, h: 350 },
+  { x: 200, y: 150, w: 20, h: 350 },
+  { x: 300, y: 0, w: 20, h: 350 }
+];
 
-function nextWord() {
-    currentWord = words[Math.floor(Math.random() * words.length)];
-    typedIndex = 0;
-    updateWordDisplay();
-}
+// 動く壁（トラップ）
+let movingWall = {
+  x: 150,
+  y: 200,
+  w: 100,
+  h: 20,
+  vx: 2
+};
 
-function updateWordDisplay() {
-    let html = `<span class="typed">${currentWord.substring(0, typedIndex)}</span>`;
-    html += `<span class="remaining">${currentWord.substring(typedIndex)}</span>`;
-    wordEl.innerHTML = html;
-}
+// ゴール
+let goal = { x: 450, y: 450, r: 15 };
 
-window.addEventListener('keydown', (e) => {
-    if (gameOver) { if (e.key === "Escape") init(); return; }
-
-    const key = e.key.toUpperCase();
-    if (key === currentWord[typedIndex]) {
-        typedIndex++;
-        if (typedIndex >= currentWord.length) {
-            // 壁粉砕！
-            score++;
-            playerX = wallX + 100; // 壁の向こうへ
-            wallX += 800; // 次の壁
-            lavaSpeed += 0.15; // 溶岩加速
-            nextWord();
-        }
-        updateWordDisplay();
-    }
+// 操作（重力変更）
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowUp") gravity = { x: 0, y: -0.3 };
+  if (e.key === "ArrowDown") gravity = { x: 0, y: 0.3 };
+  if (e.key === "ArrowLeft") gravity = { x: -0.3, y: 0 };
+  if (e.key === "ArrowRight") gravity = { x: 0.3, y: 0 };
 });
 
-function draw(time) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// 更新処理
+function update() {
+  // 重力適用
+  ball.vx += gravity.x;
+  ball.vy += gravity.y;
 
-    if (!gameOver) {
-        lavaX += lavaSpeed;
-        if (lavaX > playerX - 20) gameOver = true;
-    }
+  ball.x += ball.vx;
+  ball.y += ball.vy;
 
-    // カメラ追従
-    cameraX += (playerX - 200 - cameraX) * 0.1;
+  // 画面端
+  if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.5; }
+  if (ball.x > 500 - ball.r) { ball.x = 500 - ball.r; ball.vx *= -0.5; }
+  if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.5; }
+  if (ball.y > 500 - ball.r) { ball.y = 500 - ball.r; ball.vy *= -0.5; }
 
-    ctx.save();
-    ctx.translate(-cameraX, 0);
+  // 壁衝突
+  walls.forEach(w => collideRect(w));
 
-    // 地面
-    ctx.fillStyle = "#111";
-    ctx.fillRect(cameraX, canvas.height - 100, canvas.width, 100);
+  // 動く壁更新
+  movingWall.x += movingWall.vx;
+  if (movingWall.x < 100 || movingWall.x > 300) {
+    movingWall.vx *= -1;
+  }
 
-    // 溶岩
-    ctx.fillStyle = "#ff4400";
-    ctx.shadowBlur = 30; ctx.shadowColor = "#ff2200";
-    ctx.beginPath();
-    ctx.moveTo(lavaX, 0);
-    for(let y=0; y<=canvas.height; y+=30) {
-        let wave = Math.sin(y * 0.01 + time * 0.005) * 30;
-        ctx.lineTo(lavaX + wave + 50, y);
-    }
-    ctx.lineTo(cameraX - 100, canvas.height);
-    ctx.lineTo(cameraX - 100, 0);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+  collideRect(movingWall);
 
-    // 壁（巨大な文字の壁）
-    ctx.fillStyle = "#444";
-    ctx.fillRect(wallX, 50, 100, canvas.height - 150);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 40px Courier";
-    ctx.save();
-    ctx.translate(wallX + 60, canvas.height / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.textAlign = "center";
-    ctx.fillText("W A L L", 0, 0);
-    ctx.restore();
-
-    // プレイヤー（ミニチュア人間）
-    ctx.fillStyle = "#00ffcc";
-    ctx.beginPath();
-    ctx.arc(playerX, canvas.height - 120, 20, 0, Math.PI * 2);
-    ctx.fill();
-    // 残像エフェクト（移動中）
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(playerX - 50, canvas.height - 135, 40, 30);
-    ctx.globalAlpha = 1.0;
-
-    ctx.restore();
-
-    if (gameOver) msgEl.style.display = 'block';
-    scoreEl.innerText = score;
-    requestAnimationFrame(draw);
+  // ゴール判定
+  let dx = ball.x - goal.x;
+  let dy = ball.y - goal.y;
+  if (Math.sqrt(dx * dx + dy * dy) < goal.r) {
+    alert("クリア！");
+    reset();
+  }
 }
 
-init();
-requestAnimationFrame(draw);
+// 矩形衝突
+function collideRect(w) {
+  if (
+    ball.x > w.x &&
+    ball.x < w.x + w.w &&
+    ball.y > w.y &&
+    ball.y < w.y + w.h
+  ) {
+    // 簡易反射
+    ball.vx *= -0.7;
+    ball.vy *= -0.7;
+  }
+}
+
+// リセット
+function reset() {
+  ball.x = 50;
+  ball.y = 50;
+  ball.vx = 0;
+  ball.vy = 0;
+  gravity = { x: 0, y: 0.3 };
+}
+
+// 描画
+function draw() {
+  ctx.clearRect(0, 0, 500, 500);
+
+  // 壁
+  ctx.fillStyle = "white";
+  walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+  // 動く壁
+  ctx.fillStyle = "yellow";
+  ctx.fillRect(movingWall.x, movingWall.y, movingWall.w, movingWall.h);
+
+  // ゴール
+  ctx.fillStyle = "green";
+  ctx.beginPath();
+  ctx.arc(goal.x, goal.y, goal.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ボール
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ループ
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
 </script>
+
 </body>
 </html>
