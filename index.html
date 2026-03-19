@@ -1,158 +1,259 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>Gravity Maze Extreme</title>
-<style>
-  body {
-    margin: 0;
-    background: #111;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-  }
-  canvas { background: #000; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravi-Spiral Maze</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #0a0a15;
+            color: #00f2ff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+        }
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+        .ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+        }
+        .msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
 
-<canvas id="game" width="500" height="500"></canvas>
+    <div id="game-container">
+        <div class="ui">
+            CLICK TO CHANGE GRAVITY<br>
+            GOAL: YELLOW SQUARE
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="clearMsg" class="msg">
+            <h1>MAZE CLEARED!</h1>
+            <p>Click to Restart</p>
+        </div>
+    </div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+/**
+ * Gravi-Spiral Maze
+ * 1. 迷路自体が常に回転する
+ * 2. クリックで「重力の向き」を4方向に切り替える
+ */
 
-let ball = { x: 30, y: 30, vx: 0, vy: 0, r: 7 };
-let gravity = { x: 0, y: 0.3 };
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const clearMsg = document.getElementById('clearMsg');
 
-// 外枠＋超複雑迷路
-let walls = [
-  {x:0,y:0,w:500,h:10},{x:0,y:490,w:500,h:10},{x:0,y:0,w:10,h:500},{x:490,y:0,w:10,h:500},
+const SIZE = 600;
+canvas.width = SIZE;
+canvas.height = SIZE;
 
-  // 縦壁
-  {x:50,y:0,w:10,h:450},
-  {x:100,y:50,w:10,h:450},
-  {x:150,y:0,w:10,h:400},
-  {x:200,y:100,w:10,h:400},
-  {x:250,y:0,w:10,h:450},
-  {x:300,y:50,w:10,h:450},
-  {x:350,y:0,w:10,h:400},
-  {x:400,y:100,w:10,h:400},
-
-  // 横壁
-  {x:0,y:80,w:220,h:10},
-  {x:180,y:140,w:320,h:10},
-  {x:0,y:200,w:220,h:10},
-  {x:180,y:260,w:320,h:10},
-  {x:0,y:320,w:220,h:10},
-  {x:180,y:380,w:320,h:10},
-
-  // 行き止まり・罠
-  {x:60,y:300,w:80,h:10},
-  {x:120,y:220,w:80,h:10},
-  {x:260,y:300,w:80,h:10},
-  {x:320,y:220,w:80,h:10},
-
-  // 迷わせる細かい壁
-  {x:80,y:120,w:40,h:10},
-  {x:180,y:60,w:40,h:10},
-  {x:280,y:180,w:40,h:10},
-  {x:380,y:300,w:40,h:10}
+// 迷路データ（0:道, 1:壁, 2:ゴール）
+const maze = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,0,1,0,1,1,1,1,1,1,1,0,1],
+    [1,0,1,0,0,0,0,0,1,0,0,0,0,0,1],
+    [1,0,1,1,1,1,1,0,1,0,1,1,1,1,1],
+    [1,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
+    [1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+    [1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],
+    [1,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,0,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+    [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
+    [1,0,0,0,0,0,1,0,0,0,0,0,0,2,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
-// 動く壁（通路封鎖用）
-let movingWalls = [
-  {x:70,y:160,w:80,h:10,vx:2},
-  {x:260,y:340,w:80,h:10,vx:-2}
-];
+const rows = maze.length;
+const cols = maze[0].length;
+const cellSize = SIZE / rows;
 
-let goal = { x: 470, y: 470, r: 12 };
+let player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
+let rotation = 0;
+let gravityDir = 0; // 0:下, 1:右, 2:上, 3:左
+let isCleared = false;
 
-document.addEventListener("keydown", e => {
-  if (e.key === "ArrowUp") gravity = { x: 0, y: -0.3 };
-  if (e.key === "ArrowDown") gravity = { x: 0, y: 0.3 };
-  if (e.key === "ArrowLeft") gravity = { x: -0.3, y: 0 };
-  if (e.key === "ArrowRight") gravity = { x: 0.3, y: 0 };
+// 重力設定
+const gravityForce = 0.005;
+const friction = 0.95;
+
+function init() {
+    player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
+    gravityDir = 0;
+    rotation = 0;
+    isCleared = false;
+    clearMsg.style.display = 'none';
+}
+
+// クリックで重力の向きを変更
+canvas.addEventListener('mousedown', () => {
+    if(isCleared) {
+        init();
+    } else {
+        gravityDir = (gravityDir + 1) % 4;
+    }
 });
 
 function update() {
-  ball.vx += gravity.x;
-  ball.vy += gravity.y;
+    if(isCleared) return;
 
-  ball.x += ball.vx;
-  ball.y += ball.vy;
+    // 迷路の自動回転
+    rotation += 0.005;
 
-  // 外枠
-  if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.5; }
-  if (ball.x > 500-ball.r) { ball.x = 500-ball.r; ball.vx *= -0.5; }
-  if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.5; }
-  if (ball.y > 500-ball.r) { ball.y = 500-ball.r; ball.vy *= -0.5; }
+    // 重力加速度の適用
+    if(gravityDir === 0) player.vy += gravityForce; // Down
+    if(gravityDir === 1) player.vx += gravityForce; // Right
+    if(gravityDir === 2) player.vy -= gravityForce; // Up
+    if(gravityDir === 3) player.vx -= gravityForce; // Left
 
-  walls.forEach(w => collide(w));
+    // 速度更新
+    player.x += player.vx;
+    player.y += player.vy;
+    player.vx *= friction;
+    player.vy *= friction;
 
-  movingWalls.forEach(w => {
-    w.x += w.vx;
-    if (w.x < 50 || w.x > 350) w.vx *= -1;
-    collide(w);
-  });
-
-  let dx = ball.x - goal.x;
-  let dy = ball.y - goal.y;
-  if (Math.sqrt(dx*dx + dy*dy) < goal.r) {
-    alert("クリア！");
-    reset();
-  }
+    checkCollision();
 }
 
-function collide(w){
-  if (
-    ball.x > w.x &&
-    ball.x < w.x + w.w &&
-    ball.y > w.y &&
-    ball.y < w.y + w.h
-  ) {
-    ball.vx *= -0.6;
-    ball.vy *= -0.6;
-  }
+function checkCollision() {
+    let gridX = Math.floor(player.x);
+    let gridY = Math.floor(player.y);
+
+    // 壁判定（簡易）
+    for(let r = -1; r <= 1; r++) {
+        for(let c = -1; c <= 1; c++) {
+            let ty = gridY + r;
+            let tx = gridX + c;
+            if(ty < 0 || ty >= rows || tx < 0 || tx >= cols) continue;
+
+            if(maze[ty][tx] === 1) {
+                // 壁との重なりを解決
+                let closestX = Math.max(tx, Math.min(player.x, tx + 1));
+                let closestY = Math.max(ty, Math.min(player.y, ty + 1));
+                let dx = player.x - closestX;
+                let dy = player.y - closestY;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+
+                if(dist < player.radius) {
+                    let overlap = player.radius - dist;
+                    if(dist === 0) { // 完全に重なった場合
+                        player.x += 0.1;
+                    } else {
+                        player.x += (dx / dist) * overlap;
+                        player.y += (dy / dist) * overlap;
+                        // 速度を減衰
+                        player.vx *= 0.5;
+                        player.vy *= 0.5;
+                    }
+                }
+            } else if(maze[ty][tx] === 2) {
+                // ゴール判定
+                let dx = player.x - (tx + 0.5);
+                let dy = player.y - (ty + 0.5);
+                if(Math.sqrt(dx*dx + dy*dy) < 0.5) {
+                    isCleared = true;
+                    clearMsg.style.display = 'block';
+                }
+            }
+        }
+    }
 }
 
-function reset(){
-  ball.x = 30;
-  ball.y = 30;
-  ball.vx = 0;
-  ball.vy = 0;
-  gravity = {x:0,y:0.3};
+function draw() {
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    
+    ctx.save();
+    // 中心で回転させる
+    ctx.translate(SIZE/2, SIZE/2);
+    ctx.rotate(rotation);
+    ctx.translate(-SIZE/2, -SIZE/2);
+
+    // 迷路の描画
+    for(let r = 0; r < rows; r++) {
+        for(let c = 0; c < cols; c++) {
+            if(maze[r][c] === 1) {
+                ctx.fillStyle = '#333745';
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                ctx.strokeStyle = '#00f2ff';
+                ctx.strokeRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            } else if(maze[r][c] === 2) {
+                ctx.fillStyle = '#fffc00';
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            }
+        }
+    }
+
+    // プレイヤーの描画
+    ctx.beginPath();
+    ctx.arc(player.x * cellSize, player.y * cellSize, player.radius * cellSize, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff007a';
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#ff007a';
+    ctx.fill();
+    ctx.closePath();
+    ctx.shadowBlur = 0;
+
+    // 重力方向のガイド
+    drawGravityIndicator();
+
+    ctx.restore();
+
+    requestAnimationFrame(() => {
+        update();
+        draw();
+    });
 }
 
-function draw(){
-  ctx.clearRect(0,0,500,500);
-
-  ctx.fillStyle="white";
-  walls.forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-
-  ctx.fillStyle="yellow";
-  movingWalls.forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-
-  ctx.fillStyle="green";
-  ctx.beginPath();
-  ctx.arc(goal.x,goal.y,goal.r,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.fillStyle="red";
-  ctx.beginPath();
-  ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
-  ctx.fill();
+function drawGravityIndicator() {
+    ctx.save();
+    ctx.translate(player.x * cellSize, player.y * cellSize);
+    // 重力の向きに合わせて矢印を描く
+    let angle = 0;
+    if(gravityDir === 0) angle = Math.PI / 2;
+    if(gravityDir === 1) angle = 0;
+    if(gravityDir === 2) angle = -Math.PI / 2;
+    if(gravityDir === 3) angle = Math.PI;
+    
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(25, 0);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
 }
 
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
+draw();
 
-loop();
 </script>
-
 </body>
 </html>
