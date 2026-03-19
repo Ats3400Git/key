@@ -2,178 +2,146 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>GIANT ALPHA-STEPPER</title>
+    <title>Lava Alpha-Climber</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Arial Black', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; }
         #ui {
             position: absolute; top: 20px; left: 20px; color: #fff;
-            font-size: 24px; pointer-events: none; z-index: 10;
+            font-size: 28px; pointer-events: none; z-index: 100;
+            text-shadow: 2px 2px 4px #000;
         }
-        .energy-bar { width: 300px; height: 20px; background: #222; border: 2px solid #fff; margin-top: 5px; }
-        #energy-fill { width: 100%; height: 100%; background: #ff00ff; box-shadow: 0 0 10px #ff00ff; transition: width 0.1s; }
         #msg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff00ff; font-size: 50px; text-align: center; display: none; text-shadow: 0 0 20px #000;
+            color: #ff4400; font-size: 50px; text-align: center; display: none; z-index: 200;
+            background: rgba(0,0,0,0.8); padding: 30px; border: 4px solid #ff4400;
         }
+        canvas { display: block; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    SCORE: <span id="score">0</span><br>
-    RESERVE ENERGY
-    <div class="energy-bar"><div id="energy-fill"></div></div>
-    <div style="font-size: 14px; color: #0ff; margin-top: 5px;">TYPE LARGE TO SURVIVE!</div>
-</div>
-<div id="msg">OUT OF STEPS<br><span style="font-size:20px; color:#fff;">Press SPACE to Restart</span></div>
+<div id="ui">HEIGHT: <span id="score">0</span>m</div>
+<div id="msg">MELTED...<br><span style="font-size:20px; color:#fff;">Press Any Key to Restart</span></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
-const energyEl = document.getElementById('energy-fill');
 const msgEl = document.getElementById('msg');
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let score = 0, energy = 100, gameOver = false;
-let platforms = []; 
-let coins = [];
-const player = { x: 150, y: 300, vx: 4.5, vy: 0, radius: 15, gravity: 0.5 };
+let score = 0, gameOver = false, camY = 0;
+let lavaY = canvas.height + 200; // 溶岩の初期位置
+let lavaSpeed = 1.5; // 溶岩の上昇速度
+let steps = [];
+const player = { x: canvas.width/2, y: canvas.height - 150, radius: 15 };
 
-// コイン配置
-function initCoins() {
-    coins = [];
-    for(let i=0; i<100; i++) {
-        coins.push({ x: 600 + i * 400, y: 150 + Math.random() * 450, collected: false });
-    }
-}
-initCoins();
-
-// キー入力で「超巨大」足場生成
-window.addEventListener('keydown', (e) => {
-    if(gameOver) { if(e.code === 'Space') restart(); return; }
-    
-    const char = e.key.toUpperCase();
-    if(/^[A-Z]$/.test(char) && energy >= 20) {
-        energy -= 20;
-        platforms.push({
-            char: char,
-            x: player.x + 20, 
-            y: player.y + 60,
-            w: 180, // 当たり判定をさらに広く
-            h: 80,
-            life: 240, // 少し長めに残るように
-            hue: Math.random() * 360
-        });
-    }
-});
-
-function restart() {
-    score = 0; energy = 100; gameOver = false;
-    player.x = 150; player.y = 300; player.vx = 4.5; player.vy = 0;
-    platforms = [];
-    initCoins();
+function init() {
+    score = 0; gameOver = false; camY = 0;
+    lavaY = canvas.height + 200;
+    lavaSpeed = 1.5;
+    player.x = canvas.width/2;
+    player.y = canvas.height - 150;
+    // 最初の足場
+    steps = [{ char: "GO!", x: canvas.width/2 - 80, y: canvas.height - 100, hue: 180 }];
     msgEl.style.display = 'none';
 }
 
-function update() {
-    if(gameOver) return;
-
-    energy = Math.min(100, energy + 0.2); 
-    player.vy += player.gravity;
-    player.x += player.vx;
-    player.y += player.vy;
-
-    // 足場判定
-    platforms.forEach(p => {
-        p.life--;
-        // 巨大な文字の上に乗る判定
-        if(player.vy > 0 &&
-           player.x > p.x - 30 && player.x < p.x + p.w + 30 &&
-           player.y + player.radius > p.y && player.y + player.radius < p.y + 40) {
-            player.y = p.y - player.radius;
-            player.vy = -12; // 巨大なバネのように跳ねる
-            score += 5;
-        }
-    });
-    platforms = platforms.filter(p => p.life > 0);
-
-    // コイン回収
-    coins.forEach(c => {
-        if(!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 50) {
-            c.collected = true;
-            energy = Math.min(100, energy + 25);
-            score += 100;
-        }
-    });
-
-    if(player.y > canvas.height + 100) {
-        gameOver = true;
-        msgEl.style.display = 'block';
+window.addEventListener('keydown', (e) => {
+    if(gameOver) { init(); return; }
+    const char = e.key.toUpperCase();
+    if(/^[A-Z0-9]$/.test(char)) {
+        const newStep = {
+            char: char,
+            x: Math.random() * (canvas.width - 200) + 100,
+            y: player.y - 180, // 次の足場までの高さ
+            hue: Math.random() * 360
+        };
+        steps.push(newStep);
+        
+        // 文字の上へ移動
+        player.x = newStep.x;
+        player.y = newStep.y;
+        
+        // スコア更新と溶岩の加速
+        score = Math.floor((canvas.height - 150 - player.y) / 10);
+        lavaSpeed += 0.05; 
     }
+});
 
-    scoreEl.innerText = score;
-    energyEl.style.width = energy + "%";
-}
-
-function draw() {
+function draw(time) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 背景のグリッド感
-    ctx.strokeStyle = "#111";
-    for(let i=0; i<canvas.width; i+=100) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+
+    if(!gameOver) {
+        lavaY -= lavaSpeed; // 溶岩の上昇
+        if(player.y > lavaY - 20) gameOver = true; // 接触判定
     }
+
+    // カメラの追従
+    let targetCamY = canvas.height * 0.7 - player.y;
+    camY += (targetCamY - camY) * 0.1;
 
     ctx.save();
-    ctx.translate(-player.x + 200, 0);
+    ctx.translate(0, camY);
 
-    // コイン（ネオン風）
-    coins.forEach(c => {
-        if(!c.collected) {
-            ctx.fillStyle = "#fff";
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = "#ff0";
-            ctx.beginPath(); ctx.arc(c.x, c.y, 12, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
-        }
-    });
+    // 背景のグリッド（高さの目安）
+    ctx.strokeStyle = "#222";
+    for(let i=0; i<20000; i+=200) {
+        ctx.beginPath(); ctx.moveTo(0, canvas.height - i); ctx.lineTo(canvas.width, canvas.height - i); ctx.stroke();
+    }
 
-    // 巨大アルファベット
-    platforms.forEach(p => {
-        const alpha = Math.min(1, p.life / 50);
+    // 足場（巨大文字）の描画
+    ctx.textAlign = "center";
+    steps.forEach(s => {
+        ctx.fillStyle = `hsla(${s.hue}, 80%, 60%, 1)`;
         ctx.shadowBlur = 20;
-        ctx.shadowColor = `hsla(${p.hue}, 100%, 50%, ${alpha})`;
-        ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha})`;
-        
-        // 文字を圧倒的なサイズで描画
-        ctx.font = "900 160px 'Arial Black'"; 
-        ctx.fillText(p.char, p.x, p.y + 100);
+        ctx.shadowColor = `hsla(${s.hue}, 80%, 50%, 0.8)`;
+        ctx.font = "900 120px 'Arial Black'";
+        ctx.fillText(s.char, s.x, s.y);
         ctx.shadowBlur = 0;
     });
 
-    // プレイヤー（ミニチュア）
+    // プレイヤー（ミニチュア人間）
     ctx.fillStyle = "#fff";
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 15;
     ctx.shadowColor = "#fff";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(player.x, player.y - 40, player.radius, 0, Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
+
+    // 溶岩の描画（波打つアニメーション）
+    ctx.fillStyle = "#ff4400";
+    ctx.beginPath();
+    ctx.moveTo(0, lavaY);
+    for(let x=0; x<=canvas.width; x+=20) {
+        let wave = Math.sin(x * 0.02 + time * 0.005) * 20;
+        ctx.lineTo(x, lavaY + wave);
+    }
+    ctx.lineTo(canvas.width, lavaY + 2000);
+    ctx.lineTo(0, lavaY + 2000);
+    ctx.fill();
+    
+    // 溶岩の照り返し
+    ctx.fillStyle = "rgba(255, 68, 0, 0.3)";
+    ctx.fillRect(0, lavaY - 20, canvas.width, 20);
 
     ctx.restore();
 
-    update();
+    if(gameOver) msgEl.style.display = 'block';
+    scoreEl.innerText = score;
     requestAnimationFrame(draw);
 }
 
-draw();
+init();
+requestAnimationFrame(draw);
 </script>
 </body>
 </html>
+
+
+
 
 
 
