@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inverted Gravi-Maze: Final Fix</title>
+    <title>Inverted Gravi-Maze: Hardcore Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; color: #00f2ff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #game-container { position: relative; border: 4px solid #333; }
+        body { margin: 0; overflow: hidden; background: #050505; color: #00f2ff; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #game-container { position: relative; border: 4px solid #00f2ff; box-shadow: 0 0 20px #00f2ff55; }
         canvas { display: block; background: #000; }
-        .ui { position: absolute; top: -60px; left: 0; width: 100%; display: flex; justify-content: space-between; font-size: 14px; }
-        .warning { color: #ff3333; font-weight: bold; }
-        #timer { color: #fff; font-weight: bold; }
+        .ui { position: absolute; top: -70px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .warning { color: #ff3333; font-weight: bold; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+        #timer-box { font-size: 18px; color: #fff; border-bottom: 2px solid #fff; }
+        #timer { color: #ff007a; }
     </style>
 </head>
 <body>
     <div id="game-container">
         <div class="ui">
-            <div>NEXT ROTATION: <span id="timer">5.0</span>s</div>
-            <div class="warning">INVERTED CONTROL: UP=DOWN, LEFT=RIGHT</div>
+            <div id="timer-box">GRAVITY SHIFT IN: <span id="timer">5.0</span>s</div>
+            <div class="warning">CAUTION: CONTROLS ARE INVERTED</div>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -31,24 +32,28 @@ const SIZE = 600;
 canvas.width = SIZE;
 canvas.height = SIZE;
 
-// 0:道, 1:壁, 2:ゴール, 3:即死(赤)
-// ゴール(2)の周囲(13,13付近)から「3」を完全に排除しました。
+// 0:道, 1:壁, 2:ゴール, 3:即死トラップ
+// より複雑なパス。一筋縄ではいかない。
 const maze = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
-    [1,0,1,1,0,1,0,1,1,1,1,1,1,0,1],
-    [1,0,1,3,0,0,0,0,0,3,0,0,1,0,1],
-    [1,0,1,1,1,1,1,1,0,1,1,0,1,0,1],
-    [1,0,0,0,0,0,0,1,0,1,0,0,0,0,1],
-    [1,1,1,1,1,1,0,1,0,1,0,1,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],
-    [1,0,1,0,0,0,3,0,0,0,0,0,1,0,1],
-    [1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],
-    [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-    [1,0,1,1,1,0,1,1,1,1,1,1,1,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,3,0,0,0,1,0,0,0,0,0,1],
+    [1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1],
+    [1,0,1,0,0,0,1,0,0,0,0,1,0,0,0,1,3,0,0,1],
+    [1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1],
+    [1,0,0,0,0,0,3,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1],
+    [1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,0,1],
+    [1,0,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,1],
+    [1,3,1,0,0,0,1,0,0,0,1,0,1,3,1,0,0,0,1,1],
+    [1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+    [1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,3,0,0,0,1,0,1],
+    [1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,0,1,0,1],
+    [1,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1],
+    [1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,0,1],
+    [1,0,0,0,1,3,0,0,0,0,1,0,0,0,0,1,2,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
 
 const rows = maze.length;
@@ -57,7 +62,7 @@ const cellSize = SIZE / rows;
 let player, rotation, targetRotation, gravityDir, lastRotateTime;
 
 function init() {
-    player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
+    player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.35 };
     rotation = 0;
     targetRotation = 0;
     gravityDir = "DOWN";
@@ -65,6 +70,7 @@ function init() {
 }
 
 window.addEventListener('keydown', (e) => {
+    // 反転操作を維持
     if(e.key === "ArrowUp")    gravityDir = "DOWN";
     if(e.key === "ArrowDown")  gravityDir = "UP";
     if(e.key === "ArrowLeft")  gravityDir = "RIGHT";
@@ -82,9 +88,9 @@ function update() {
         lastRotateTime = now;
     }
     
-    rotation += (targetRotation - rotation) * 0.15;
+    rotation += (targetRotation - rotation) * 0.1; // 少しゆっくり回転させて酔いを防止
 
-    const force = 0.007;
+    const force = 0.008; // 少しだけ重力を強く
     if(gravityDir === "DOWN")  player.vy += force;
     if(gravityDir === "UP")    player.vy -= force;
     if(gravityDir === "LEFT")  player.vx -= force;
@@ -92,8 +98,8 @@ function update() {
 
     player.x += player.vx;
     player.y += player.vy;
-    player.vx *= 0.95;
-    player.vy *= 0.95;
+    player.vx *= 0.94;
+    player.vy *= 0.94;
 
     checkCollision();
 }
@@ -113,17 +119,26 @@ function checkCollision() {
                 let dy = player.y - Math.max(ty, Math.min(player.y, ty + 1));
                 let distSq = dx*dx + dy*dy;
                 if(distSq < player.radius * player.radius) {
-                    if(tile === 3) { init(); return; }
+                    if(tile === 3) { 
+                        // 即死エフェクト（簡易）
+                        ctx.fillStyle = "white";
+                        ctx.fillRect(0,0,SIZE,SIZE);
+                        init(); 
+                        return; 
+                    }
                     let dist = Math.sqrt(distSq);
                     if(dist > 0) {
                         player.x += (dx/dist) * (player.radius - dist);
                         player.y += (dy/dist) * (player.radius - dist);
-                        if(Math.abs(dx) > Math.abs(dy)) player.vx = 0; else player.vy = 0;
+                        if(Math.abs(dx) > Math.abs(dy)) player.vx *= -0.2; else player.vy *= -0.2;
                     }
                 }
             } else if(tile === 2) {
                 let dx = player.x - (tx + 0.5), dy = player.y - (ty + 0.5);
-                if(dx*dx + dy*dy < 0.25) { alert("CLEAR!"); init(); }
+                if(dx*dx + dy*dy < 0.3) { 
+                    alert("CONGRATULATIONS! YOU CONQUERED THE INVERSION."); 
+                    init(); 
+                }
             }
         }
     }
@@ -139,23 +154,36 @@ function draw() {
     for(let r = 0; r < rows; r++) {
         for(let c = 0; c < rows; c++) {
             const tile = maze[r][c];
+            // 路を見やすく描画
+            if(tile === 0 || tile === 2) {
+                ctx.fillStyle = '#111';
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            }
             if(tile === 1) {
-                ctx.fillStyle = '#111'; ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                ctx.fillStyle = '#222'; 
+                ctx.strokeStyle = '#00f2ff22';
+                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                ctx.strokeRect(c * cellSize, r * cellSize, cellSize, cellSize);
             } else if(tile === 3) {
                 ctx.fillStyle = '#ff0000';
-                ctx.fillRect(c * cellSize + 8, r * cellSize + 8, cellSize - 16, cellSize - 16);
+                ctx.shadowBlur = 10; ctx.shadowColor = 'red';
+                ctx.fillRect(c * cellSize + 10, r * cellSize + 10, cellSize - 20, cellSize - 20);
+                ctx.shadowBlur = 0;
             } else if(tile === 2) {
                 ctx.fillStyle = '#fffc00'; ctx.shadowBlur = 20; ctx.shadowColor = '#fffc00';
-                ctx.fillRect(c * cellSize + 5, r * cellSize + 5, cellSize - 10, cellSize - 10);
+                ctx.fillRect(c * cellSize + 4, r * cellSize + 4, cellSize - 8, cellSize - 8);
                 ctx.shadowBlur = 0;
             }
         }
     }
 
-    ctx.fillStyle = '#ff007a'; ctx.shadowBlur = 10; ctx.shadowColor = '#ff007a';
+    // プレイヤー
+    ctx.fillStyle = '#ff007a'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff007a';
     ctx.beginPath();
     ctx.arc(player.x * cellSize, player.y * cellSize, player.radius * cellSize, 0, Math.PI*2);
     ctx.fill();
+    
+    // 操作方向ガイド（デバッグ兼ヒント：操作が反転していることを示す）
     ctx.restore();
 
     requestAnimationFrame(() => { update(); draw(); });
@@ -166,4 +194,5 @@ draw();
 </script>
 </body>
 </html>
+
 
