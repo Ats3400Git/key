@@ -3,142 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gravi-Spiral Maze</title>
+    <title>Inverted Gravi-Maze</title>
     <style>
         body {
-            margin: 0;
-            overflow: hidden;
-            background: #0a0a15;
-            color: #00f2ff;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
+            margin: 0; overflow: hidden; background: #050505;
+            color: #00f2ff; font-family: sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;
         }
-        #game-container {
-            position: relative;
-            border: 4px solid #333;
-            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
-        }
-        canvas {
-            display: block;
-            cursor: pointer;
-        }
+        #game-container { position: relative; border: 2px solid #333; }
+        canvas { display: block; background: #000; }
         .ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            pointer-events: none;
+            position: absolute; top: -50px; left: 0; width: 100%;
+            display: flex; justify-content: space-between; font-size: 12px;
         }
-        .msg {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            display: none;
-        }
+        .warning { color: #ff3333; font-weight: bold; }
+        kbd { background: #444; padding: 2px 4px; border-radius: 3px; color: #fff; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
         <div class="ui">
-            CLICK TO CHANGE GRAVITY<br>
-            GOAL: YELLOW SQUARE
+            <div>GRAVITY: <span id="grav-text" style="color:#ff007a">NONE</span></div>
+            <div class="warning">CAUTION: RED WALL = DEATH / ARROWS ARE INVERTED</div>
         </div>
         <canvas id="gameCanvas"></canvas>
-        <div id="clearMsg" class="msg">
-            <h1>MAZE CLEARED!</h1>
-            <p>Click to Restart</p>
-        </div>
     </div>
 
 <script>
-/**
- * Gravi-Spiral Maze
- * 1. 迷路自体が常に回転する
- * 2. クリックで「重力の向き」を4方向に切り替える
- */
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const clearMsg = document.getElementById('clearMsg');
+const gravText = document.getElementById('grav-text');
 
 const SIZE = 600;
 canvas.width = SIZE;
 canvas.height = SIZE;
 
-// 迷路データ（0:道, 1:壁, 2:ゴール）
+// 0:道, 1:壁, 2:ゴール, 3:即死(赤)
 const maze = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
-    [1,0,1,0,1,0,1,1,1,1,1,1,1,0,1],
-    [1,0,1,0,0,0,0,0,1,0,0,0,0,0,1],
-    [1,0,1,1,1,1,1,0,1,0,1,1,1,1,1],
-    [1,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
-    [1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
-    [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-    [1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],
-    [1,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,1,1,1,1,1,1,1,1,0,1,1,1,1,1],
-    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+    [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+    [1,0,1,0,0,0,3,3,3,0,0,0,1,0,1],
     [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
-    [1,0,0,0,0,0,1,0,0,0,0,0,0,2,1],
+    [1,0,0,0,3,0,0,0,0,0,3,0,0,0,1],
+    [1,1,1,0,1,0,1,1,1,0,1,0,1,1,1],
+    [1,0,0,0,0,0,1,2,1,0,0,0,0,0,1],
+    [1,1,1,0,1,0,1,1,1,0,1,0,1,1,1],
+    [1,0,0,0,3,0,0,0,0,0,3,0,0,0,1],
+    [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
+    [1,0,1,0,0,0,3,3,3,0,0,0,1,0,1],
+    [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+    [1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
 const rows = maze.length;
-const cols = maze[0].length;
 const cellSize = SIZE / rows;
 
-let player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
-let rotation = 0;
-let gravityDir = 0; // 0:下, 1:右, 2:上, 3:左
-let isCleared = false;
-
-// 重力設定
-const gravityForce = 0.005;
-const friction = 0.95;
+let player, rotation, targetRotation, gravityDir, lastRotateTime;
 
 function init() {
     player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
-    gravityDir = 0;
     rotation = 0;
-    isCleared = false;
-    clearMsg.style.display = 'none';
+    targetRotation = 0;
+    gravityDir = "DOWN";
+    lastRotateTime = Date.now();
+    gravText.innerText = gravityDir;
 }
 
-// クリックで重力の向きを変更
-canvas.addEventListener('mousedown', () => {
-    if(isCleared) {
-        init();
-    } else {
-        gravityDir = (gravityDir + 1) % 4;
-    }
+window.addEventListener('keydown', (e) => {
+    // 反転操作: Up→DOWN, Down→UP, Left→RIGHT, Right→LEFT
+    if(e.key === "ArrowUp")    gravityDir = "DOWN";
+    if(e.key === "ArrowDown")  gravityDir = "UP";
+    if(e.key === "ArrowLeft")  gravityDir = "RIGHT";
+    if(e.key === "ArrowRight") gravityDir = "LEFT";
+    gravText.innerText = gravityDir;
 });
 
 function update() {
-    if(isCleared) return;
+    const now = Date.now();
+    // 1秒(1000ms)ごとに90度回転
+    if (now - lastRotateTime > 1000) {
+        targetRotation += Math.PI / 2;
+        lastRotateTime = now;
+    }
+    
+    // 回転のアニメーション（少しだけ滑らかに補間、一瞬で回るなら rotation = targetRotation）
+    rotation += (targetRotation - rotation) * 0.2;
 
-    // 迷路の自動回転
-    rotation += 0.005;
+    const force = 0.007;
+    if(gravityDir === "DOWN")  player.vy += force;
+    if(gravityDir === "UP")    player.vy -= force;
+    if(gravityDir === "LEFT")  player.vx -= force;
+    if(gravityDir === "RIGHT") player.vx += force;
 
-    // 重力加速度の適用
-    if(gravityDir === 0) player.vy += gravityForce; // Down
-    if(gravityDir === 1) player.vx += gravityForce; // Right
-    if(gravityDir === 2) player.vy -= gravityForce; // Up
-    if(gravityDir === 3) player.vx -= gravityForce; // Left
-
-    // 速度更新
     player.x += player.vx;
     player.y += player.vy;
-    player.vx *= friction;
-    player.vy *= friction;
+    player.vx *= 0.95;
+    player.vy *= 0.95;
 
     checkCollision();
 }
@@ -147,41 +110,29 @@ function checkCollision() {
     let gridX = Math.floor(player.x);
     let gridY = Math.floor(player.y);
 
-    // 壁判定（簡易）
     for(let r = -1; r <= 1; r++) {
         for(let c = -1; c <= 1; c++) {
-            let ty = gridY + r;
-            let tx = gridX + c;
-            if(ty < 0 || ty >= rows || tx < 0 || tx >= cols) continue;
+            let ty = gridY + r, tx = gridX + c;
+            if(ty < 0 || ty >= rows || tx < 0 || tx >= rows) continue;
 
-            if(maze[ty][tx] === 1) {
-                // 壁との重なりを解決
-                let closestX = Math.max(tx, Math.min(player.x, tx + 1));
-                let closestY = Math.max(ty, Math.min(player.y, ty + 1));
-                let dx = player.x - closestX;
-                let dy = player.y - closestY;
-                let dist = Math.sqrt(dx*dx + dy*dy);
-
-                if(dist < player.radius) {
-                    let overlap = player.radius - dist;
-                    if(dist === 0) { // 完全に重なった場合
-                        player.x += 0.1;
-                    } else {
-                        player.x += (dx / dist) * overlap;
-                        player.y += (dy / dist) * overlap;
-                        // 速度を減衰
-                        player.vx *= 0.5;
-                        player.vy *= 0.5;
+            const tile = maze[ty][tx];
+            if(tile === 1 || tile === 3) {
+                let dx = player.x - Math.max(tx, Math.min(player.x, tx + 1));
+                let dy = player.y - Math.max(ty, Math.min(player.y, ty + 1));
+                if(dx*dx + dy*dy < player.radius * player.radius) {
+                    if(tile === 3) { // 即死
+                        init();
+                        return;
                     }
+                    // 壁の押し戻し
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    let overlap = player.radius - dist;
+                    player.x += (dx/dist) * overlap;
+                    player.y += (dy/dist) * overlap;
                 }
-            } else if(maze[ty][tx] === 2) {
-                // ゴール判定
-                let dx = player.x - (tx + 0.5);
-                let dy = player.y - (ty + 0.5);
-                if(Math.sqrt(dx*dx + dy*dy) < 0.5) {
-                    isCleared = true;
-                    clearMsg.style.display = 'block';
-                }
+            } else if(tile === 2) {
+                let dx = player.x - (tx + 0.5), dy = player.y - (ty + 0.5);
+                if(dx*dx + dy*dy < 0.3) { alert("CLEAR!"); init(); }
             }
         }
     }
@@ -189,21 +140,21 @@ function checkCollision() {
 
 function draw() {
     ctx.clearRect(0, 0, SIZE, SIZE);
-    
     ctx.save();
-    // 中心で回転させる
     ctx.translate(SIZE/2, SIZE/2);
     ctx.rotate(rotation);
     ctx.translate(-SIZE/2, -SIZE/2);
 
-    // 迷路の描画
     for(let r = 0; r < rows; r++) {
-        for(let c = 0; c < cols; c++) {
+        for(let c = 0; c < rows; c++) {
             if(maze[r][c] === 1) {
-                ctx.fillStyle = '#333745';
+                ctx.fillStyle = '#222';
                 ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
-                ctx.strokeStyle = '#00f2ff';
-                ctx.strokeRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            } else if(maze[r][c] === 3) {
+                ctx.fillStyle = '#ff3333'; // 即死壁
+                ctx.shadowBlur = 10; ctx.shadowColor = 'red';
+                ctx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
+                ctx.shadowBlur = 0;
             } else if(maze[r][c] === 2) {
                 ctx.fillStyle = '#fffc00';
                 ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
@@ -211,49 +162,17 @@ function draw() {
         }
     }
 
-    // プレイヤーの描画
-    ctx.beginPath();
-    ctx.arc(player.x * cellSize, player.y * cellSize, player.radius * cellSize, 0, Math.PI * 2);
     ctx.fillStyle = '#ff007a';
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#ff007a';
-    ctx.fill();
-    ctx.closePath();
-    ctx.shadowBlur = 0;
-
-    // 重力方向のガイド
-    drawGravityIndicator();
-
-    ctx.restore();
-
-    requestAnimationFrame(() => {
-        update();
-        draw();
-    });
-}
-
-function drawGravityIndicator() {
-    ctx.save();
-    ctx.translate(player.x * cellSize, player.y * cellSize);
-    // 重力の向きに合わせて矢印を描く
-    let angle = 0;
-    if(gravityDir === 0) angle = Math.PI / 2;
-    if(gravityDir === 1) angle = 0;
-    if(gravityDir === 2) angle = -Math.PI / 2;
-    if(gravityDir === 3) angle = Math.PI;
-    
-    ctx.rotate(angle);
     ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(25, 0);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.arc(player.x * cellSize, player.y * cellSize, player.radius * cellSize, 0, Math.PI*2);
+    ctx.fill();
     ctx.restore();
+
+    requestAnimationFrame(() => { update(); draw(); });
 }
 
+init();
 draw();
-
 </script>
 </body>
 </html>
