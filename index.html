@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inverted Gravi-Maze v2</title>
+    <title>Fixed Inverted Maze</title>
     <style>
         body { margin: 0; overflow: hidden; background: #050505; color: #00f2ff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #game-container { position: relative; border: 2px solid #333; }
+        #game-container { position: relative; border: 4px solid #1a1a1a; box-shadow: 0 0 20px rgba(0,242,255,0.1); }
         canvas { display: block; background: #000; }
         .ui { position: absolute; top: -50px; left: 0; width: 100%; display: flex; justify-content: space-between; font-size: 14px; }
-        .warning { color: #ff3333; font-weight: bold; }
-        #timer { color: #fff; font-variant-numeric: tabular-nums; }
+        .warning { color: #ff3333; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        #grav-dir { color: #ff007a; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="game-container">
         <div class="ui">
-            <div>NEXT ROTATION: <span id="timer">10.0</span>s</div>
-            <div class="warning">INVERTED ARROWS & RED IS DEATH</div>
+            <div>GRAVITY: <span id="grav-dir">DOWN</span></div>
+            <div class="warning">INVERTED CONTROL: ARROW UP = FALL DOWN</div>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -25,74 +25,62 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const timerEl = document.getElementById('timer');
+const gravEl = document.getElementById('grav-dir');
 
 const SIZE = 600;
 canvas.width = SIZE;
 canvas.height = SIZE;
 
-// 0:道, 1:壁, 2:ゴール, 3:即死(赤) - 赤いマスを大幅に減らしました
+// 0:道, 1:壁, 2:ゴール, 3:即死(赤)
 const maze = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,1,0,0,0,0,0,0,0,3,2,1],
-    [1,0,1,0,1,0,1,1,1,1,1,0,1,1,1],
-    [1,0,1,0,0,0,0,0,3,0,1,0,0,0,1],
-    [1,0,1,1,1,1,1,0,1,0,1,1,1,0,1],
-    [1,3,0,0,0,0,1,0,1,0,0,0,1,0,1],
-    [1,1,1,1,1,0,1,0,1,1,1,0,1,3,1],
-    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1],
-    [1,0,1,0,0,0,3,0,1,0,0,0,0,0,1],
-    [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1],
-    [1,0,0,0,1,0,0,0,0,0,3,0,0,0,1],
-    [1,1,1,0,1,0,1,1,1,1,1,0,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,0,1,0,1,1,1,1,1,0,1,0,1],
+    [1,0,1,0,0,0,0,0,3,0,1,0,1,0,1],
+    [1,0,1,1,1,1,1,0,1,0,1,0,1,0,1],
+    [1,0,0,0,0,0,1,0,1,0,0,0,1,0,1],
+    [1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,0,1,1,1,1,1,1,1,0,1,1,1],
+    [1,0,1,0,0,0,1,0,0,0,1,0,0,0,1],
+    [1,3,1,1,1,0,1,0,1,0,1,1,1,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+    [1,0,1,1,1,1,1,1,1,1,1,0,1,0,1],
+    [1,0,0,0,0,0,0,0,0,3,0,0,0,2,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
 const rows = maze.length;
 const cellSize = SIZE / rows;
 
-let player, rotation, targetRotation, gravityDir, lastRotateTime;
+let player, gravityDir;
 
 function init() {
-    player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.3 };
-    rotation = 0;
-    targetRotation = 0;
+    player = { x: 1.5, y: 1.5, vx: 0, vy: 0, radius: 0.35 };
     gravityDir = "DOWN";
-    lastRotateTime = Date.now();
+    gravEl.innerText = gravityDir;
 }
 
 window.addEventListener('keydown', (e) => {
-    // 操作反転: Up->DOWN, Down->UP, Left->RIGHT, Right->LEFT
+    // 反転操作設定
     if(e.key === "ArrowUp")    gravityDir = "DOWN";
     if(e.key === "ArrowDown")  gravityDir = "UP";
     if(e.key === "ArrowLeft")  gravityDir = "RIGHT";
     if(e.key === "ArrowRight") gravityDir = "LEFT";
+    gravEl.innerText = gravityDir;
 });
 
 function update() {
-    const now = Date.now();
-    const elapsed = now - lastRotateTime;
-    const timeLeft = Math.max(0, (10000 - elapsed) / 1000);
-    timerEl.innerText = timeLeft.toFixed(1);
-
-    if (elapsed > 10000) {
-        targetRotation += Math.PI / 2;
-        lastRotateTime = now;
-    }
-    
-    // 回転の補間（10秒に一度の回転を強調するため、回転時は少し速めに）
-    rotation += (targetRotation - rotation) * 0.15;
-
-    const force = 0.007;
+    const force = 0.008;
     if(gravityDir === "DOWN")  player.vy += force;
     if(gravityDir === "UP")    player.vy -= force;
     if(gravityDir === "LEFT")  player.vx -= force;
     if(gravityDir === "RIGHT") player.vx += force;
 
-    player.x += player.vx; player.y += player.vy;
-    player.vx *= 0.95; player.vy *= 0.95;
+    player.x += player.vx;
+    player.y += player.vy;
+    player.vx *= 0.94; // 摩擦
+    player.vy *= 0.94;
 
     checkCollision();
 }
@@ -110,17 +98,23 @@ function checkCollision() {
             if(tile === 1 || tile === 3) {
                 let dx = player.x - Math.max(tx, Math.min(player.x, tx + 1));
                 let dy = player.y - Math.max(ty, Math.min(player.y, ty + 1));
-                if(dx*dx + dy*dy < player.radius * player.radius) {
-                    if(tile === 3) { init(); return; }
-                    let dist = Math.sqrt(dx*dx + dy*dy);
+                let distSq = dx*dx + dy*dy;
+                
+                if(distSq < player.radius * player.radius) {
+                    if(tile === 3) { init(); return; } // 赤いマスでリセット
+                    
+                    let dist = Math.sqrt(distSq);
                     if(dist > 0) {
                         player.x += (dx/dist) * (player.radius - dist);
                         player.y += (dy/dist) * (player.radius - dist);
+                        // 壁にぶつかったら速度を殺す
+                        if(Math.abs(dx) > Math.abs(dy)) player.vx = 0;
+                        else player.vy = 0;
                     }
                 }
             } else if(tile === 2) {
                 let dx = player.x - (tx + 0.5), dy = player.y - (ty + 0.5);
-                if(dx*dx + dy*dy < 0.4) { alert("MAZE CLEARED!"); init(); }
+                if(dx*dx + dy*dy < 0.3) { alert("GOAL!"); init(); }
             }
         }
     }
@@ -128,35 +122,42 @@ function checkCollision() {
 
 function draw() {
     ctx.clearRect(0, 0, SIZE, SIZE);
-    ctx.save();
-    ctx.translate(SIZE/2, SIZE/2);
-    ctx.rotate(rotation);
-    ctx.translate(-SIZE/2, -SIZE/2);
+
+    // 背景に薄いグリッド
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    for(let i=0; i<=SIZE; i+=cellSize) {
+        ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,SIZE); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(SIZE,i); ctx.stroke();
+    }
 
     for(let r = 0; r < rows; r++) {
         for(let c = 0; c < rows; c++) {
-            if(maze[r][c] === 1) {
-                ctx.fillStyle = '#111';
-                ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
-                ctx.strokeStyle = '#222'; ctx.strokeRect(c * cellSize, r * cellSize, cellSize, cellSize);
-            } else if(maze[r][c] === 3) {
+            const tile = maze[r][c];
+            if(tile === 1) {
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(c * cellSize + 1, r * cellSize + 1, cellSize - 2, cellSize - 2);
+            } else if(tile === 3) {
                 ctx.fillStyle = '#ff0000';
-                ctx.fillRect(c * cellSize + 4, r * cellSize + 4, cellSize - 8, cellSize - 8);
-            } else if(maze[r][c] === 2) {
+                ctx.shadowBlur = 10; ctx.shadowColor = 'red';
+                ctx.fillRect(c * cellSize + 6, r * cellSize + 6, cellSize - 12, cellSize - 12);
+                ctx.shadowBlur = 0;
+            } else if(tile === 2) {
                 ctx.fillStyle = '#fffc00';
-                ctx.shadowBlur = 15; ctx.shadowColor = '#fffc00';
-                ctx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
+                ctx.shadowBlur = 20; ctx.shadowColor = '#fffc00';
+                ctx.fillRect(c * cellSize + 4, r * cellSize + 4, cellSize - 8, cellSize - 8);
                 ctx.shadowBlur = 0;
             }
         }
     }
 
+    // プレイヤー（自機）
     ctx.fillStyle = '#ff007a';
-    ctx.shadowBlur = 10; ctx.shadowColor = '#ff007a';
+    ctx.shadowBlur = 15; ctx.shadowColor = '#ff007a';
     ctx.beginPath();
     ctx.arc(player.x * cellSize, player.y * cellSize, player.radius * cellSize, 0, Math.PI*2);
     ctx.fill();
-    ctx.restore();
+    ctx.shadowBlur = 0;
 
     requestAnimationFrame(() => { update(); draw(); });
 }
@@ -166,4 +167,3 @@ draw();
 </script>
 </body>
 </html>
-
